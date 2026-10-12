@@ -71,8 +71,11 @@ class _Backends:
     designated owner worker.
     """
 
-    # How long to wait for the other flavour to drain before giving up.
-    switch_timeout = 600
+    # How long the other flavour may go without one of its tests finishing before
+    # we give up waiting for it. Bounded per test rather than for the whole drain,
+    # which is as long as the suite: a QEMU test takes ten minutes or more under
+    # xdist load, and there are as many rounds of them as the queue holds.
+    switch_timeout = 1200
 
     def __init__(self, shared_dir):
         self.lock = filelock.FileLock(str(shared_dir / "mender-backend.lock"))
@@ -104,7 +107,7 @@ class _Backends:
 
     def acquire(self, plan):
         project = SERVER_PROJECTS[plan]
-        deadline = time.monotonic() + self.switch_timeout
+        last_held = None
         while True:
             with self.lock:
                 state = self._read()
@@ -128,11 +131,14 @@ class _Backends:
             # what starves the Go services and turns requests into 504s, so wait
             # for it to drain instead. A worker never holds two flavours at once --
             # these fixtures are function-scoped -- so this always resolves.
+            if held != last_held:
+                last_held = held
+                deadline = time.monotonic() + self.switch_timeout
             if time.monotonic() > deadline:
                 raise RuntimeError(
-                    f"timed out after {self.switch_timeout}s waiting for the "
-                    f"{other} backend to be released by {held} test(s) before "
-                    f"switching to {plan}"
+                    f"no test released the {other} backend in "
+                    f"{self.switch_timeout}s ({held} still holding it) while "
+                    f"waiting to switch to {plan}"
                 )
             logger.info(
                 "waiting for the %s backend to be released by %d test(s)", other, held
