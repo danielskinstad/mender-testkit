@@ -1,0 +1,5 @@
+# Opt-in through compose.enable_device_tiers().
+services:
+  deviceauth:
+    environment:
+      DEVICEAUTH_ENABLE_TIERS: "true"

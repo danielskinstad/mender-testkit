@@ -43,6 +43,8 @@ _OVERLAY_ROOT = ("data", "overlays")
 # paths. Under xdist each worker gets its own copy, which costs 31 KB.
 _materialised = None
 
+_device_tiers = False
+
 
 def _copy_tree(src, dest: Path) -> None:
     """Recursively copy a Traversable into a real directory.
@@ -96,6 +98,12 @@ def _resource(parts):
     return root
 
 
+def enable_device_tiers() -> None:
+    """Enable device tiers in deviceauth. Call before the backend is started."""
+    global _device_tiers
+    _device_tiers = True
+
+
 def compose_files(plan: str = "os", publish_ports: bool = False, dest=None) -> list:
     """Compose files for `plan`, in the order they must be passed to -f.
 
@@ -108,6 +116,8 @@ def compose_files(plan: str = "os", publish_ports: bool = False, dest=None) -> l
     paths = [d / "docker-compose.yml"]
     if plan == "enterprise":
         paths.append(d / "compose" / "docker-compose.enterprise.yml")
+    if _device_tiers:
+        paths.append(d / "overlays" / "device-tiers.yml")
     if not publish_ports:
         # Last, so it overrides whatever the files above declared.
         paths.append(d / "overlays" / "no-ports.yml")

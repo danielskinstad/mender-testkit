@@ -61,13 +61,13 @@ HOST_NAME = "docker.mender.io"
 _READY_STATUS_CODES = (200, 401, 405)
 
 
-def get_server_host(project):
-    """IP of the ingress container for `project`.
+def get_server_host(project, service="traefik"):
+    """IP of the `service` container for `project`, the ingress by default.
 
     Retried: immediately after `compose up` the container exists but has not
     been given an address on the network yet.
     """
-    container = f"{project}-traefik-1"
+    container = f"{project}-{service}-1"
 
     def _get_host():
         with docker_lock:
@@ -236,6 +236,28 @@ class Server:
         )
         assert r.status_code == 200, f"{r.text} {r.status_code}"
         return r.json()["tenant_token"]
+
+    def set_tier_limit(self, limit: int, tier: str):
+        """Set how many devices of `tier` the tenant may have accepted."""
+        name = {
+            "standard": "max_devices",
+            "micro": "max_micro_devices",
+            "system": "max_system_devices",
+        }[tier]
+        host = get_server_host(self.project_name, service="deviceauth")
+        client = ApiClient(
+            deviceauth.URL_INTERNAL,
+            host=f"{host}:8080",
+            schema="http://",
+            host_header="",
+        )
+        r = client.call(
+            "PUT",
+            "/tenant/{tid}/limits/{name}",
+            body={"limit": limit},
+            path_params={"tid": self.tenant_id, "name": name},
+        )
+        assert r.status_code == 204, f"{r.text} {r.status_code}"
 
     # ------------------------------------------------------------------ devices
 
